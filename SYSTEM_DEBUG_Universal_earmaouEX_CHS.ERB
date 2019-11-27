@@ -1,0 +1,766 @@
+﻿;FileName_SYSTEM_DEBUG_Universal_eramaouEX_CHS.ERB -------------------------------- Rev1.05_maouEX
+;デバッグモード起動: @DEBUG_MENU_U
+;Usage: Modify SHOP File to add "CALL DEBUG_MENU_U"
+;
+;Modify by Tsubasa (2016/4/30 6th Version)
+;
+;Original File: eraToho SYSTEM_DEBUG.ERB
+;=============================================================================
+;キャラリスト表示用の命令実装群
+;=============================================================================
+;-------------------------------------------------
+;リストのキャラデータをセットする関数
+;-------------------------------------------------
+;CALLF SET_LIST, [リスト位置], [キャラ番号]
+@SET_LIST(ARG, ARG:1)
+#FUNCTION
+RETURNF LIST_DATA("SET", ARG, ARG:1)
+
+;-------------------------------------------------
+;リストのキャラデータをセットする関数
+;-------------------------------------------------
+;[変数等] = GET_LIST([リスト位置])
+@GET_LIST(ARG)
+#FUNCTION
+RETURNF LIST_DATA("GET", ARG)
+
+;-------------------------------------------------
+;内部で使用される関数
+;-------------------------------------------------
+;直接これを呼び出す必要はない
+@LIST_DATA(ARGS, ARG, ARG:1)
+#FUNCTION
+IF ARGS == "SET"
+	LOCAL:ARG = ARG:1
+	RETURNF ARG:1
+ELSEIF ARGS == "GET"
+	RETURNF LOCAL:ARG
+ELSEIF ARGS == "CLEAR"
+	VARSET LOCAL, 0
+	RETURNF -1
+ELSE
+	RETURNF -1
+ENDIF
+
+;-------------------------------------------------
+;リストをクリアする関数
+;-------------------------------------------------
+;CALLF CLEAR_LIST
+@CLEAR_LIST
+#FUNCTION
+RETURNF LIST_DATA("CLEAR")
+
+;≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡
+;デバッグモード用の特殊指令
+;≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡
+;以下焼き芋弁当パッチ用のデバッグモードを起動しているときに使える特殊な処理をここで一括で管理
+;大きく分けて調教中に使えるものとメイン菜單(SHOP)が開いているときに使用できるものに分かれる
+;=============================================================================
+;調教中に使用可能な指令
+;=============================================================================
+@DEBUG_MENU_U
+PRINTL 此项目为作弊内容，可以修改大部分 era 系游戏的相关数值，请确认以下内容：
+PRINTL ***正在运行的版本是：简体中文版，如果出现乱码，请使用日文版本
+PRINTW ***Now Running Version: CHS, if not read any Chinese Code then USE Japanese Version, Please!
+DRAWLINE
+PRINTFORML 天数：{DAY}
+IF TARGET >= 0
+	PRINTFORM %CALLNAME:TARGET% 选择中　
+ENDIF
+PRINTFORML (剩余{MONEY}金钱)
+DRAWLINE
+PRINTL 选择需要的操作项目？
+PRINTL 
+PRINTLC [ 0] - 角色编辑 
+PRINTLC [ 1] - 修改金钱
+PRINTLC [ 2] - FLAG操作
+PRINTLC [ 3] - 角色全回復
+PRINTLC [ 4] - ITEM编辑
+PRINTLC [99] - 强制跳到明天
+PRINTLC [100] - 返回
+PRINTL 
+$INPUT_LOOP
+INPUT
+IF RESULT == 0
+	LOCAL = MASTER
+	LOCAL:1 = TARGET
+	LOCAL:2 = ASSI
+	CALL EDIT_CHARA
+	MASTER = LOCAL
+	TARGET = LOCAL:1
+	ASSI = LOCAL:2
+ELSEIF RESULT == 1
+	CALL EDIT_MONEY
+ELSEIF RESULT == 2
+	CALL EDIT_FLAG
+ELSEIF RESULT == 3
+	CALL EDIT_HEAL_ALL
+ELSEIF RESULT == 4
+	CALL EDIT_ITEM
+ELSEIF RESULT == 99
+	CALL NEXTDAY
+ELSEIF RESULT == 100
+	RETURN 0
+ELSE
+	GOTO INPUT_LOOP
+ENDIF
+RESTART
+
+;--------------------------------------------------
+;所持金変更処理
+;--------------------------------------------------
+@EDIT_MONEY
+PRINTFORML (有可能剩余的金钱1：{MONEY:0} 或者 金钱2：{MONEY:1} 再可能 金钱3：{MONEY:2})
+PRINTL 选择和游戏相关的一项或者多项金钱数值(请先看一下游戏的显示数值)：
+DRAWLINE
+FOR LOCAL, 0, 3
+	PRINTFORMLC [{LOCAL, 3}]MONEY:{LOCAL, 3}  = {MONEY:LOCAL}
+NEXT
+PRINTLC [200]返回
+PRINTL 
+$INPUT_LOOP
+INPUT
+IF RESULT == 200
+	RETURN 0
+ELSEIF RESULT < 0 || RESULT > 3
+	GOTO INPUT_LOOP
+ELSE
+	LOCAL = RESULT
+	DRAWLINE
+	PRINTFORML 修改 MONEY:{LOCAL} 数值(现在是：{MONEY:LOCAL})
+	PRINTFORML 请输入数值[0-99999999]（无效的数值会取消修改）
+	INPUT
+	SIF RESULT < 0 || RESULT > 99999999
+		RESTART
+	MONEY:LOCAL = RESULT
+	FLAG:4444 = RESULT - 8766
+	PRINTFORML 数值已经修改为：{MONEY:LOCAL}
+ENDIF
+RESTART
+
+;--------------------------------------------------
+;キャラ全快
+;--------------------------------------------------
+@EDIT_HEAL_ALL
+REPEAT CHARANUM
+	BASE:COUNT:0 = MAXBASE:COUNT:0
+	BASE:COUNT:1 = MAXBASE:COUNT:1
+REND
+PRINTW 全员体力、气力回复完毕···
+
+;--------------------------------------------------
+;キャラ書き換え
+;--------------------------------------------------
+@EDIT_CHARA
+;前後のキャラを表示できるか判定
+LOCAL:1 = -1
+LOCAL:2 = -1
+FOR LOCAL, 0, CHARANUM
+	SIF LOCAL == TARGET
+		CONTINUE
+	IF LOCAL < TARGET
+		LOCAL:1 = LOCAL
+	ELSE
+		LOCAL:2 = LOCAL
+		BREAK
+	ENDIF
+NEXT
+
+DRAWLINE
+PRINTFORML \@(TARGET < 0) ? 请选择需要编辑的对象 # 现在是「%CALLNAME:TARGET%」选择中\@
+DRAWLINE
+PRINTFORMLC [  0] - \@(TARGET >= 0) ? 对象变更 # 对象选择\@
+IF TARGET >= 0
+;	PRINTLC [  1] - 对象情报(未实装)
+	PRINTLC [  2] - ABL 编辑
+	PRINTLC [  3] - EXP 编辑
+	PRINTLC [  4] - MARK 编辑
+	PRINTLC [  5] - TALENT 编辑
+	PRINTLC [  6] - JUEL 编辑
+	PRINTLC [  7] - CFLAG 编辑
+	PRINTLC [  8] - PALAM 编辑
+	PRINTLC [  9] - BASE 编辑
+	PRINTLC [  10] - MAXBASE 编辑
+ENDIF
+PRINTL 
+DRAWLINE
+PRINTFORMLC \@(LOCAL:1 < 0) ? %" " * 16% # [1011]编辑 %CALLNAME:(LOCAL:1)%\@
+PRINTFORMLC [1000]返回
+PRINTFORMLC \@(LOCAL:2 < 0) ? %" " * 16% # [1019]编辑 %CALLNAME:(LOCAL:2)%\@
+PRINTL 
+$INPUT_LOOP
+INPUT
+IF RESULT == 1000
+	RETURN 0
+ELSEIF RESULT == 1011 && LOCAL:1 >= 0
+	TARGET = LOCAL:1
+ELSEIF RESULT == 1019 && LOCAL:2 >= 0
+	TARGET = LOCAL:2
+ELSEIF RESULT == 0
+	CALL SELECT_TARGET
+ELSEIF TARGET < 0
+	PRINTW 请选择需要编辑的对象。
+;ELSEIF RESULT == 1
+;	CALL PRINT_STATE(TARGET)
+ELSEIF RESULT == 2
+	CALL EDIT_ABL
+ELSEIF RESULT == 3
+	CALL EDIT_EXP
+ELSEIF RESULT == 4
+	CALL EDIT_MARK
+ELSEIF RESULT == 5
+	CALL EDIT_TALENT
+ELSEIF RESULT == 6
+	CALL EDIT_JUEL
+ELSEIF RESULT == 7
+	CALL EDIT_CFLAG
+ELSEIF RESULT == 8
+	CALL EDIT_PALAM
+ELSEIF RESULT == 9
+	CALL EDIT_BASE
+ELSEIF RESULT == 10
+	CALL EDIT_MAX_BASE
+ENDIF
+RESTART
+
+@SELECT_TARGET
+;表示させるキャラを抽出（LOCAL:2に人数）
+VARSET LOCAL, 0
+CALLF CLEAR_LIST
+LOCAL:1 = CHARANUM / 20
+
+$PRINT_LIST
+DRAWLINE
+SIF TARGET >= 0
+	PRINTFORML 现在选择的角色是:%CALLNAME:TARGET%
+PRINTFORML 准备选择谁作为编辑对象呢？ ＜page.{LOCAL+1}＞
+DRAWLINE
+REPEAT CHARANUM
+	SIF COUNT >= LOCAL * 20 && COUNT < (LOCAL+1) * 20
+		PRINTFORML [{COUNT}]%NAME:COUNT%
+REND
+DRAWLINE
+PRINTFORMLC \@(LOCAL <= 0) ? %" " * 16% # [1001]前一页\@
+PRINTLC [1000]返回
+PRINTFORMLC \@(LOCAL >= LOCAL:1) ? %" " * 16% # [1009]下一页\@
+PRINTL 
+$INPUT_LOOP
+INPUT
+IF RESULT == 1000
+	RETURN 0
+ELSEIF RESULT == 1001 && LOCAL > 0
+	LOCAL -= 1
+	GOTO PRINT_LIST
+ELSEIF RESULT == 1009 && LOCAL < LOCAL:1
+	LOCAL += 1
+	GOTO PRINT_LIST
+ELSEIF RESULT < 0 || RESULT >= CHARANUM
+	GOTO INPUT_LOOP
+ENDIF
+
+TARGET = RESULT
+PRINTFORML %CALLNAME:TARGET% 已作为编辑对象。
+
+;--------------------------------------------------
+; PALAM操作
+;--------------------------------------------------
+@EDIT_PALAM
+DRAWLINE
+FOR LOCAL, 0, 100
+	SIF STRLENS(PALAMNAME:LOCAL) == 0
+		CONTINUE
+	PRINTFORMLC [{LOCAL, 3}]%PALAMNAME:LOCAL% ({PALAM:LOCAL}) 
+NEXT
+PRINTLC [199]PALAM 数值清零
+PRINTLC [200]返回
+PRINTL 
+$INPUT_LOOP
+INPUT
+IF RESULT == 200
+	RETURN 0
+ELSEIF RESULT == 199
+	VARSET PALAM, 0
+	PRINTW 所有的 PALAM 数值已清零。
+	RESTART
+ELSEIF RESULT < 0 || RESULT > 99
+	GOTO INPUT_LOOP
+ELSE
+	LOCAL = RESULT
+	SIF STRLENS(PALAMNAME:LOCAL) == 0
+		GOTO INPUT_LOOP
+	DRAWLINE
+	PRINTFORML 修改 %PALAMNAME:LOCAL% 数值(现在是：{PALAM:LOCAL})
+	PRINTFORML 请输入数值[0-9999999]（无效的数值会取消修改）
+	INPUT
+	SIF RESULT < 0 || RESULT > 9999999
+		RESTART
+	PALAM:LOCAL = RESULT
+ENDIF
+RESTART
+
+;--------------------------------------------------
+; BASE操作
+;--------------------------------------------------
+@EDIT_BASE
+DRAWLINE
+FOR LOCAL, 0, 100
+	PRINTFORMLC [{LOCAL, 3}] \@ (STRLENS(BASENAME:LOCAL) == 0) ? BASE:{LOCAL, 3} # %BASENAME:LOCAL%\@ = {BASE:LOCAL}
+NEXT
+PRINTLC [199]BASE 数值清零
+PRINTLC [200]返回
+PRINTL 
+$INPUT_LOOP
+INPUT
+IF RESULT == 200
+	RETURN 0
+ELSEIF RESULT == 199
+	VARSET BASE, 0
+	PRINTW BASE 全部数值已清零
+	RESTART
+ELSEIF RESULT < 0 || RESULT > 99
+	GOTO INPUT_LOOP
+ELSE
+	LOCAL = RESULT
+	SIF STRLENS(BASENAME:LOCAL) == 0
+		GOTO INPUT_LOOP
+	DRAWLINE
+	PRINTFORML \@ (STRLENS(BASENAME:LOCAL) == 0) ? BASE:{LOCAL} # %BASENAME:LOCAL%\@ の変更(現在{BASE:LOCAL})
+;	PRINTFORML 修改 %BASENAME:LOCAL% 数值(现在是：{BASE:LOCAL})
+	PRINTFORML 请输入数值[0-9999999]（无效的数值会取消修改）
+	INPUT
+	SIF RESULT < 0 || RESULT > 9999999
+		RESTART
+	BASE:LOCAL = RESULT
+ENDIF
+RESTART
+
+
+;--------------------------------------------------
+; ABL操作
+;--------------------------------------------------
+;ABL変更
+@EDIT_ABL
+DRAWLINE
+FOR LOCAL, 0, 100
+	SIF STRLENS(ABLNAME:LOCAL) == 0
+		CONTINUE
+	PRINTFORMLC [{LOCAL, 3}]%ABLNAME:LOCAL%LV ({ABL:LOCAL})  
+NEXT
+PRINTL 
+PRINTLC [200]返回
+PRINTLC [201]全部ABL修改为10
+PRINTL 
+$INPUT_LOOP
+INPUT
+IF RESULT == 200
+	RETURN 0
+ELSEIF RESULT == 201
+	FOR LOCAL, 0, 100
+	SIF STRLENS(ABLNAME:LOCAL) == 0
+		CONTINUE
+	ABL:LOCAL = 10
+	NEXT
+	PRINTW 全部ABL等级已经修改为10。
+	RESTART
+SIF RESULT < 0 || RESULT > 107
+	GOTO INPUT_LOOP
+ELSE
+	LOCAL = RESULT
+	DRAWLINE
+	PRINTFORML 修改 %ABLNAME:LOCAL% 等级(现在是：LV{ABL:LOCAL})
+	PRINTFORML 请输入等级[0-999]（无效的等级会取消修改）
+	INPUT
+	SIF RESULT < 0 || RESULT > 999
+		RESTART
+	ABL:LOCAL = RESULT
+ENDIF
+
+RESTART
+
+;--------------------------------------------------
+;素質編集
+;--------------------------------------------------
+@EDIT_TALENT
+LOCAL = 0
+LOCAL:1 = 4
+;CALLF CLEAR_LIST
+;表示させる素質を抽出
+FOR LOCAL, 0, 220
+	SIF STRLENS(TALENTNAME:LOCAL) == 0
+		CONTINUE
+	PRINTFORMLC [{LOCAL, 3}]%TALENTNAME:LOCAL% ({TALENT:LOCAL})  
+NEXT
+PRINTL
+DRAWLINE
+PRINTFORML 哪些素质需要修改？ ＜page.{LOCAL+1}＞
+DRAWLINE
+PRINTLC [9999]返回
+PRINTL 
+$INPUT_LOOP
+INPUT
+IF RESULT == 9999
+	RETURN 0
+ENDIF
+SIF STRLENS(TALENTNAME:RESULT) == 0
+	GOTO INPUT_LOOP
+LOCAL:1 = RESULT
+PRINTFORML %TALENTNAME:(RESULT)%的修改：
+PRINTFORML 输入数值（-9 - 49, 请参照 CSV 文件进行修改）
+INPUT
+SIF RESULT < -9 || RESULT > 49
+	RESTART
+TALENT:(LOCAL:1) = RESULT
+RESTART
+
+;--------------------------------------------------
+; MARK操作
+;--------------------------------------------------
+;MARK変更
+@EDIT_MARK
+DRAWLINE
+FOR LOCAL, 0, 100
+	SIF STRLENS(MARKNAME:LOCAL) == 0
+		CONTINUE
+	PRINTFORML [{LOCAL, 3}]%MARKNAME:LOCAL% ({MARK:LOCAL})
+NEXT
+PRINTL [100]返回
+$INPUT_LOOP
+INPUT
+IF RESULT == 100
+	RETURN 0
+ELSEIF RESULT < 0 || RESULT > 100
+	GOTO INPUT_LOOP
+ENDIF
+LOCAL = RESULT
+SIF STRLENS(MARKNAME:LOCAL) == 0
+	GOTO INPUT_LOOP
+DRAWLINE
+PRINTFORML 修改 %MARKNAME:LOCAL% 等级(现在是：LV{MARK:LOCAL})
+PRINTFORML 请输入等级[0-5]（请确定游戏刻印最大上限，一般游戏都为3，无效数值会取消修改）
+INPUT
+SIF RESULT < 0 || RESULT >5
+	RESTART
+MARK:LOCAL = RESULT
+
+RESTART
+
+;--------------------------------------------------
+; EXP操作
+;--------------------------------------------------
+;EXP変更
+@EDIT_EXP
+DRAWLINE
+FOR LOCAL:1, 0, 100
+	LOCAL = LOCAL:1
+	SIF STRLENS(EXPNAME:LOCAL) == 0
+		CONTINUE
+	PRINTFORMLC [{LOCAL, 3}]%EXPNAME:LOCAL% ({EXP:LOCAL})　
+NEXT
+PRINTLC [200]返回
+PRINTLC [201]全部EXP修改为1999
+PRINTL 
+$INPUT_LOOP
+INPUT
+IF RESULT == 200
+	RETURN 0
+ELSEIF RESULT == 201
+	FOR LOCAL, 0, 100
+	SIF STRLENS(EXPNAME:LOCAL) == 0
+		CONTINUE
+	EXP:LOCAL = 999
+	NEXT
+	PRINTW 全部EXP已修改为999。
+	RESTART
+ELSEIF RESULT < 0 || RESULT > 100
+	GOTO INPUT_LOOP
+ELSE
+LOCAL = RESULT
+SIF STRLENS(EXPNAME:LOCAL) == 0
+	GOTO INPUT_LOOP
+DRAWLINE
+PRINTFORML 修改 %EXPNAME:LOCAL% 数值(现在是：{EXP:LOCAL})
+PRINTFORML 请输入数值（负的数值会取消修改）
+INPUT
+SIF RESULT < 0
+	RESTART
+EXP:LOCAL = RESULT
+ENDIF
+RESTART
+
+;--------------------------------------------------
+; JUEL操作
+;--------------------------------------------------
+;JUEL変更
+@EDIT_JUEL
+DRAWLINE
+FOR LOCAL, 0, 100
+	SIF STRLENS(PALAMNAME:LOCAL) == 0
+		CONTINUE
+	PRINTFORMLC [{LOCAL, 3}]%PALAMNAME:LOCAL%之珠({JUEL:LOCAL}) 
+NEXT
+PRINTLC [200]返回
+PRINTLC [201]全部珠修改为999999
+PRINTL 
+$INPUT_LOOP
+INPUT
+IF RESULT == 200
+	RETURN 0
+ELSEIF RESULT == 201
+	FOR LOCAL, 0, 100
+	SIF STRLENS(PALAMNAME:LOCAL) == 0
+		CONTINUE
+	JUEL:LOCAL = 999999
+	NEXT
+	PRINTW 全部珠已修改为999999。
+	RESTART
+ELSEIF RESULT < 0 || RESULT > 100
+	GOTO INPUT_LOOP
+ELSE
+LOCAL = RESULT
+SIF STRLENS(PALAMNAME:LOCAL) == 0
+	GOTO INPUT_LOOP
+DRAWLINE
+PRINTFORML %PALAMNAME:LOCAL%之珠修改(现在是：{JUEL:LOCAL})
+PRINTFORML 请输入数值（负的数值会取消修改）
+INPUT
+SIF RESULT < 0
+	RESTART
+JUEL:LOCAL = RESULT
+ENDIF
+RESTART
+
+
+;--------------------------------------------------
+; CFLAG操作
+;--------------------------------------------------
+@EDIT_CFLAG
+LOCAL = 0
+$PRINT_LIST
+DRAWLINE
+PRINTFORML 现在列表的CFLAG项 (最大为1000项)
+PRINTFORML 需要修改哪些呢？ ＜page.{LOCAL+1}＞
+DRAWLINE
+REPEAT 1000
+	SIF COUNT < LOCAL * 50 || COUNT >= (LOCAL + 1) * 50
+		CONTINUE
+	PRINTFORMLC [{COUNT, 3}] \@ (STRLENS(CFLAGNAME:COUNT) == 0) ? CFLAG:{COUNT, 3} # %CFLAGNAME:COUNT%\@ = {CFLAG:COUNT}
+;	PRINTFORMLC [{COUNT, 3}] TFLAG:{COUNT, 3} = {CFLAG:COUNT}
+REND
+PRINTL 
+DRAWLINE
+PRINTFORMLC \@(LOCAL <= 0) ? %" " * 16% # [1001]前一页\@
+PRINTLC [1000]返回
+PRINTFORMLC \@(LOCAL >= 19) ? %" " * 16% # [1009]后一页\@
+$INPUT_LOOP
+INPUT
+IF RESULT == 1000
+	RETURN 0
+ELSEIF RESULT == 1001 && LOCAL > 0
+	LOCAL -= 1
+	GOTO PRINT_LIST
+ELSEIF RESULT == 1009 && LOCAL < 19
+	LOCAL += 1
+	GOTO PRINT_LIST
+ELSEIF RESULT < 0 || RESULT > 1000
+	GOTO INPUT_LOOP
+ENDIF
+LOCAL:1 = RESULT
+DRAWLINE
+PRINTFORML \@ (STRLENS(CFLAGNAME:RESULT) == 0) ? CFLAG:{RESULT} # %CFLAGNAME:RESULT%\@ 修改：(现在是：{CFLAG:RESULT})
+;PRINTFORML CFLAG:{RESULT}の変更(現在{CFLAG:RESULT})
+PRINTFORML 请输入数值（数值小于-999会取消修改）
+INPUT
+SIF RESULT <= -999
+	RESTART
+CFLAG:(LOCAL:1) = RESULT
+GOTO PRINT_LIST
+
+;--------------------------------------------------
+;TFLAG編集
+;--------------------------------------------------
+@EDIT_TFLAG
+LOCAL = 0
+$PRINT_LIST
+DRAWLINE
+PRINTFORML 现在列表的TFLAG项(最大为1000项)
+PRINTFORML 需要修改哪些呢？ ＜page.{LOCAL+1}＞
+DRAWLINE
+REPEAT 1000
+	SIF COUNT < LOCAL * 50 || COUNT >= (LOCAL + 1) * 50
+		CONTINUE
+	PRINTFORMLC [{COUNT, 3}] TFLAG:{COUNT, 3} = {TFLAG:COUNT}
+REND
+PRINTL 
+DRAWLINE
+PRINTFORMLC \@(LOCAL <= 0) ? %" " * 16% # [1001]前一页\@
+PRINTLC [1000]返回
+PRINTFORMLC \@(LOCAL >= 19) ? %" " * 16% # [1009]后一页\@
+PRINTL [1010]全部TFLAG清零(要注意后果)
+$INPUT_LOOP
+INPUT
+IF RESULT == 1000
+	RETURN 0
+ELSEIF RESULT == 1001 && LOCAL > 0
+	LOCAL -= 1
+	GOTO PRINT_LIST
+ELSEIF RESULT == 1009 && LOCAL < 19
+	LOCAL += 1
+	GOTO PRINT_LIST
+ELSEIF RESULT == 1010
+	VARSET TFLAG, 0
+	PRINTW 全部TFLAG已清零完毕
+	GOTO PRINT_LIST
+ELSEIF RESULT < 0 || RESULT > 1000
+	GOTO INPUT_LOOP
+ENDIF
+LOCAL:1 = RESULT
+DRAWLINE
+PRINTFORML 修改 TFLAG:{RESULT} 数值(现在是：{TFLAG:RESULT})
+PRINTFORML 请输入数值（负的数值为取消修改）
+INPUT
+SIF RESULT < 0
+	RESTART
+TFLAG:(LOCAL:1) = RESULT
+GOTO PRINT_LIST
+
+;--------------------------------------------------
+;FLAG編集
+;--------------------------------------------------
+;説明付与
+@DEFINE_FLAG, ARG
+IF STRLENS(FLAGNAME:ARG) > 0
+	PRINTS FLAGNAME:ARG
+ELSE
+	PRINT ――
+ENDIF
+
+@EDIT_FLAG
+VARSET LOCAL, 0
+LOCAL:1 = 199
+$PRINT_LIST
+DRAWLINE
+PRINTFORML 现在列表的FLAG项(最大为10000项)
+PRINTFORML 需要修改哪些呢？ ＜page.{LOCAL+1}＞
+DRAWLINE
+REPEAT 10000
+	SIF COUNT < LOCAL * 50 || COUNT >= (LOCAL + 1) * 50
+		CONTINUE
+	PRINTFORMLC [{COUNT, 4}] \@ (STRLENS(FLAGNAME:COUNT) == 0) ? FLAG:{COUNT, 4} # %FLAGNAME:COUNT%\@ = {FLAG:COUNT}
+;	PRINTFORMLC [{COUNT, 4}] FLAG:{COUNT, 4} = {FLAG:COUNT}
+REND
+PRINTL 
+DRAWLINE
+PRINTFORMLC \@(LOCAL <= 0) ? %" " * 17% # [10001]前一页\@
+PRINTLC [10000]返回
+PRINTFORMLC \@(LOCAL >= LOCAL:1) ? %" " * 17% # [10009]下一页\@
+PRINTL 
+PRINTFORMLC \@(LOCAL/10 <= 0) ? %" " * 17% # [10011]前10页\@
+PRINTFORMLC %" " * 17%
+PRINTFORMLC \@(LOCAL/10 >= LOCAL:1/10) ? %" " * 17% # [10019]后10页\@
+PRINTL 
+$INPUT_LOOP
+INPUT
+IF RESULT == 10000
+	RETURN 0
+ELSEIF RESULT == 10001 && LOCAL > 0
+	LOCAL -= 1
+	GOTO PRINT_LIST
+ELSEIF RESULT == 10009 && LOCAL < LOCAL:1
+	LOCAL += 1
+	GOTO PRINT_LIST
+ELSEIF RESULT == 10011 && LOCAL/10 > 0
+	LOCAL -= 10
+	GOTO PRINT_LIST
+ELSEIF RESULT == 10019 && LOCAL/10 < LOCAL:1/10
+	LOCAL += 10
+	GOTO PRINT_LIST
+ELSEIF RESULT < 0 || RESULT > 10000
+	GOTO INPUT_LOOP
+ENDIF
+LOCAL:2 = RESULT
+DRAWLINE
+PRINTFORM FLAG:{LOCAL:2}(
+CALL DEFINE_FLAG, LOCAL:2
+PRINTFORML )修改：(现在是：{FLAG:(LOCAL:2)})
+PRINTFORML 请输入数值（负的数值会取消修改）
+INPUT
+SIF RESULT < 0
+	RESTART
+FLAG:(LOCAL:2) = RESULT
+GOTO PRINT_LIST
+
+;--------------------------------------------------
+; MAXBASE操作
+;--------------------------------------------------
+@EDIT_MAX_BASE
+DRAWLINE
+FOR LOCAL, 0, 100
+	PRINTFORMLC [{LOCAL, 3}] \@ (STRLENS(BASENAME:LOCAL) == 0) ? MAXBASE:{LOCAL, 3} # %BASENAME:LOCAL%\@ = {MAXBASE:LOCAL}
+;	PRINTFORMLC [{LOCAL, 3}]%BASENAME:LOCAL% ({MAXBASE:LOCAL}) 
+NEXT
+PRINTLC [200]返回
+PRINTL 
+$INPUT_LOOP
+INPUT
+IF RESULT == 200
+	RETURN 0
+ELSEIF RESULT < 0 || RESULT > 99
+	GOTO INPUT_LOOP
+ELSE
+	LOCAL = RESULT
+	DRAWLINE
+	PRINTFORML \@ (STRLENS(BASENAME:LOCAL) == 0) ? MAXBASE:{LOCAL} # %BASENAME:LOCAL%\@ 的上限修改(现在是：{MAXBASE:LOCAL})
+	PRINTFORML 请输入数值[0-9999999]（无效数值会取消修改）
+	INPUT
+	SIF RESULT < 0 || RESULT > 9999999
+		RESTART
+	MAXBASE:LOCAL = RESULT
+ENDIF
+RESTART
+
+;--------------------------------------------------
+; ITEM操作
+;--------------------------------------------------
+;ITEMの有無をCSVから取得
+@DISP_ITEM(ARG)
+#FUNCTION
+RETURNF (STRLENS(ITEMNAME:ARG)) ? 1 # 0
+
+;ITEM変更
+@EDIT_ITEM
+DRAWLINE
+FOR LOCAL:1, 0, 1000
+	LOCAL = LOCAL:1
+	SIF DISP_ITEM(LOCAL) == 0
+		CONTINUE
+	PRINTFORMLC [{LOCAL, 3}]%ITEMNAME:LOCAL% ({ITEM:LOCAL})　
+NEXT
+PRINTLC [9999]返回
+PRINTL 
+$INPUT_LOOP
+INPUT
+SIF RESULT == 9999
+	RETURN 0
+SIF RESULT < 0 || RESULT > 1000
+	GOTO INPUT_LOOP
+LOCAL = RESULT
+SIF STRLENS(ITEMNAME:LOCAL) == 0
+	GOTO INPUT_LOOP
+DRAWLINE
+PRINTFORML 修改 %ITEMNAME:LOCAL% 数值(现在是：{ITEM:LOCAL})
+PRINTFORML 请输入数值（负的数值会取消修改）
+INPUT
+SIF RESULT < 0
+	RESTART
+ITEM:LOCAL = RESULT
+RESTART
+
+
+
+
+;--------------------------------------------------
+;NEXTDAY
+;--------------------------------------------------
+@NEXTDAY
+DAY += 1
+BEGIN AFTERTRAIN
